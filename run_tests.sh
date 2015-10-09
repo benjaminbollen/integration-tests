@@ -14,7 +14,7 @@ if [ "$REPO_TO_TEST" == "" ]; then
 fi
 
 if [ "$TEST_AGAINST_BRANCH" == "" ]; then
-        echo "must specify a $TEST_AGAINST_BRANCH (typically master or develop)$"
+        echo "must specify a $TEST_AGAINST_BRANCH (this is the branch to be built for other dependencies of the tests, typically master or develop)$"
        exit 1
 fi
 
