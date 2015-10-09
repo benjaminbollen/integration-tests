@@ -18,7 +18,7 @@ dependencies:
     - "sudo curl -sSL -o /usr/local/bin/docker-machine https://github.com/docker/machine/releases/download/v$DOCKER_MACHINE_VERSION/docker-machine_linux-amd64 && sudo chmod +x /usr/local/bin/docker-machine"
 ```
 
-You can set all the `$DOCKER` variables in your admin panel for the repo on circleci.com. We use `quay.io`, rather than the default, `hub.docker.com`, because it's been more reliable.
+You can set all the `$DOCKER` variables in your admin panel for the repo on circleci.com. We use `quay.io` for docker images, rather than the default, `hub.docker.com`, because it's been more reliable.
 
 Now, to actually run your tests using your docker machines,
 
@@ -28,7 +28,7 @@ test:
     - curl https://raw.githubusercontent.com/eris-ltd/integration-tests/master/test.sh | bash -s $REPO/tests
 ```
 
-So here' we are fetching the `test.sh` script from this repo and running it on the `tests` folder in our repo, where `$REPO` is the full path (presumably on the GOPATH) to our repo.
+Here we are fetching the `test.sh` script from this repo and running it on the `tests` folder in our repo, where `$REPO` is the full path (presumably on the GOPATH) to our repo.
 
 The tests folder should have everything required for running your tests. In addition, it must contain a `params.sh` file looking like:
 
@@ -39,7 +39,7 @@ export client_tool=eris
 # path in the GOPATH
 export base=github.com/eris-ltd/eris-cli
 
-# a script which will build all docker containers needed for testing
+# a script which will build all docker containers needed for testing, including a test container itself
 export build_script=tests/build_tool.sh 
 
 # image to use for the testing container, and its entrypoint
