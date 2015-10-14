@@ -2,48 +2,59 @@
 
 # this exists as its own script because it needs isolated environment variables for connecting to docker
 
-# runIntegrationTest(machine, testID, log folder)
+
+# runIntegrationTest(machine, repo, build_script, log folder)
 runIntegrationTest(){
-    echo "Running integration test on $1"
-    connect_machine $1
+    machine=$1
+    thisRepo=$2
+    build_script=$3
+    log_folder=$4
+    echo "* integration test $thisRepo ($build_script) on machine $machine"
+    connect_machine $machine
 
-    setupForTests
-
-    test=${TESTS[$2]}
-    thisRepo=$GOPATH/src/${test[0]}
-    build_script=${test[1]}
-    echo ""
-    echo "Building tests for $thisRepo on $machine"
-    strt=`pwd`
-    cd $thisRepo
-    # build and run the tests
     base=$(basename $thisRepo)
-    $build_script > $3/$base
+
+    echo "... run pre events for $base"
+    setupForTests > "$log_folder/$base-setup"
+
+    echo ""
+    echo "... building/running tests for $thisRepo using $build_script"
+    strt=`pwd`
+    cd $GOPATH/src/$thisRepo
+    # build and run the tests
+    $build_script > $log_folder/$base
 
     # logging the exit code
     test_exit=$(echo $?)
-    log_results # TODO communicate which test this is
+    log_results $machine $test_exit
+
+    echo " ... done tests for $thisRepo ($build_script) !"
 }
 
-# runLocalTest(machine, build_script)
+# runLocalTest(machine, build_script, logFolder)
 runLocalTest(){
-    echo "Running local test on $1"
+    echo "* local test on $1"
     connect_machine $1
 
-    setupForTests
+    echo "... run pre events for $TOOL (local)"
+    setupForTests > "$3/$TOOL-local-setup"
 
-    build_script=$2 > "$3/$(basename $repo)-local"
-    $build_script
+    echo "... building/running tests for $TOOL (local) using $2"
+    $2 > "$3/$TOOL-local"
+    test_exit=$(echo $?)
+    log_results $1 $test_exit
+
+    echo " ... done tests for $TOOL (local)"
 }
 
 # params
-# ("integration", <machine>, <test index>, <logFolder>)
+# ("integration", <machine>, <repo>, <build_script>, <logFolder>)
 # or ("local", <machine>, <path to build script>)
 
 if [[ "$1" == "integration" ]]; then
-	runIntegrationTest $2 $3 $4
+	runIntegrationTest $2 $3 $4 $5
 elif [[ "$1" == "local" ]]; then
-	runLocalTest $2 $3
+	runLocalTest $2 $3 $4
 else
 	echo "unknown test type: $1. must be 'integration' or 'local'"
 	exit 1

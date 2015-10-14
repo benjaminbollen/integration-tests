@@ -2,12 +2,12 @@
 
 This repo provides shell scripts for two testing goals:
 
-1) use circle-ci for automated testing but manage the docker machines ourselves 
+1) use circle-ci to boot docker machines and run tests on them
 
-2) run a suite of cross-repository tests when a repo pushes to a "staging" branch 
+2) run a suite of cross-repository tests when certain repos push to a "staging" branch 
 
-Since docker on circle is anything but fun, we assume repos that want to run integration tests have their own tests to run before the integration tests,
-and that these will run using our provisioned docker machines. 
+We assume repos that want to run integration tests have their own tests to run along with the integration tests,
+and that these will also run using our provisioned docker machines. 
 
 
 Testing with docker-machine
