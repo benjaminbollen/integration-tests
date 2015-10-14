@@ -34,7 +34,7 @@ test:
     - curl https://raw.githubusercontent.com/eris-ltd/integration-tests/master/test.sh > $HOME/test.sh && bash $HOME/test.sh $REPO/tests $MACHINE_NAME
 ```
 
-Here we are fetching the `test.sh` script from this repo and running it on the `tests` folder in our repo, where `$REPO` is the full path (presumably on the GOPATH) to our repo. `$MACHINE_NAME` is the name of the docker-machine to use, if it is already provisioned (and included in the `eris/test_machines` image). If `$MACHINE_NAME` is empty, a new machine will be provisioned. 
+Here we are fetching the `test.sh` script from the integration tests repo and running it on the `tests` folder in the repo we're testing, where `$REPO` is the full path (presumably on the GOPATH). `$MACHINE_NAME` is the name of the docker-machine to use, if it is already provisioned (and included in the `eris/test_machines` image). If `$MACHINE_NAME` is empty, a new machine will be provisioned. 
 
 The tests folder should have everything required for running your tests. In addition, it must contain a `params.sh` file looking like:
 

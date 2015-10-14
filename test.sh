@@ -3,7 +3,7 @@
 SWARM="dca1"
 
 # repos with integration tests
-# add repos+build scripts here to add more integration tests
+# add to $TESTS to add more integration tests
 # TODO: break these up so we can pick which tests to run based on what was pushed to
 # (ie. mindy/mint-client tests dont need to run when js is updated)
 TEST_MINT_CLIENT=("github.com/eris-ltd/mint-client" "DOCKER/eris-cli/build.sh")
@@ -13,13 +13,18 @@ TESTS=(
 	$TEST_MINDY
 )
 
-N_TESTS=`expr ${#TESTS[@]} + 1` # one for each integration test plus the native test for the repo
+# one for each integration test plus the native test for the repo
+# this is how many docker-machines we'll start
+N_TESTS=${#TESTS[@]} 
+N_TESTS=$((N_TESTS + 1)) 
+echo "NTESTS: $N_TESTS"
 
 
 # do any preliminary setup for integrations tests
-# TODO: these need to run on each machine
+# like rebuilding docker images with new code
+# NOTE: these need to run on each machine
 setupForTests(){
-	case $REPO_TO_TEST in
+	case $TOOL in
 	"eris-cli" )  # installed already by circle
 		;;
 	"mint-client" )  cd $GOPATH/src/github.com/eris-ltd/eris-db; docker build -t eris/erisdb:$ERIS_VERISON -f ./DOCKER/Dockerfile .
@@ -35,12 +40,14 @@ setupForTests(){
 	esac
 }
 
+export -f setupForTests
+
 # ----------------------------------------------------------------------------
 # Functions we'll need for checking machines/swarms and running the tests
 
 # so we can launch machines in parallel
-declare -a launch_procs
-declare -a launch_results	
+declare -A launch_procs
+declare -A launch_results	
 
 clear_procs() {
   launch_procs=()
@@ -55,7 +62,7 @@ wait_procs() {
   for proc in "${!launch_procs[@]}"
   do
     wait ${launch_procs[$proc]}
-    results[$proc]=$?
+    launch_results[$proc]=$?
   done
 }
 
@@ -71,7 +78,8 @@ check_procs() {
 }
 
 rand8(){
-	cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 8 | head -n 1
+	# NOTE: names starting with an integer cause trouble
+	cat /dev/urandom | tr -dc 'a-zA-Z' | fold -w 8 | head -n 1
 }
 
 ifExit(){
@@ -95,8 +103,9 @@ connect_machine(){
 	ifExit "failed to connect to $1"
 }
 
+export -f connect_machine
+
 create_machine(){
-	echo "Create new machine named $1"
 	docker-machine create --driver amazonec2 $1
 	ifExit "failed to create new machine $1"
 }
@@ -177,34 +186,10 @@ log_results() {
   fi
 }
 
-# runIntegrationTest(testID, log folder)
-runIntegrationTest(){
-    setupForTests
+export -f log_results
 
-    test=${TESTS[$1]}
-    repo=$GOPATH/src/${test[0]}
-    build_script=${test[1]}
-    echo ""
-    echo "Building tests for $repo on $machine"
-    strt=`pwd`
-    cd $repo
-    # build and run the tests
-    basename=$(basename $repo)
-    $build_script > $2/$basename
-
-    # logging the exit code
-    test_exit=$(echo $?)
-    log_results # TODO communicate which test this is
-}
-
-# runLocalTest(build_script)
-runLocalTest(){
-    setupForTests
-
-    build_script=$1
-    $build_script
-}
-
+# ----------------------------------------------------------------------------
+# 				START
 # ----------------------------------------------------------------------------
 # Read args and set parameters
 
@@ -217,6 +202,11 @@ fi
 test_folder=$1
 machine=$2 # either "local", a machine in the matdef, or empty to create a new one
 
+echo "test folder $test_folder"
+
+# sourcing params.sh gives us:
+# - $base
+# - $build_script
 source $test_folder/params.sh
 
 # ----------------------------------------------------------------------------
@@ -234,6 +224,10 @@ fi
 branch=${CIRCLE_BRANCH:=master}
 branch=${branch/-/_}
 
+TOOL=$(basename $base)
+
+REPO_TO_TEST=$base
+
 
 # ---------------------------------------------------------------------------
 # Get the machine definitions, connect to one, build the images
@@ -249,69 +243,113 @@ if [[ $machine == "" ]]; then
 	# otherwise, just one
 	BRANCH=`git rev-parse --abbrev-ref HEAD`
 	if [ "$BRANCH" == "$integration_tests_branch" ]; then
+		echo "We're on an integration test branch ($BRANCH). Run the integration tests ..."
+
 		TEST_AGAINST_BRANCH=$integration_test_against_branch
 		if [[ "$TEST_AGAINST_BRANCH" == "" ]]; then
 			TEST_AGAINST_BRANCH="master"
 		fi
 
+		echo "Integration tests will run against $TEST_AGAINST_BRANCH"
+
 		# grab all the repos except the one we're testing
 		for rtest in "${TESTS[@]}"
 		do
-			repo=${rtest[0]}
-			if [ "$repo" != "$REPO_TO_TEST" ];  then
-				wd=$GOPATH/src/$repo
-				git clone https://$repo $wd
+			nextRepo=${rtest[0]}
+			if [ "$nextRepo" != "$REPO_TO_TEST" ];  then
+				wd=$GOPATH/src/$nextRepo
+				git clone https://$nextRepo $wd
 				cd $wd; git checkout $TEST_AGAINST_BRANCH
 			fi
 		done
 
+		# optionally specify machines to run the tests on
+		machs="${@:3}"
+		if [[ "$machs" != "" ]]; then
+			# if machs are given, there must be enough of them
+			if [[ "${#machs[@]}" != $N_TESTS ]]; then
+				echo "if machines are specified, there must be enough to run all the tests. got ${#machs[@]}, required $N_TESTS"
+				exit 1
+			fi
 
-		# launch one machine for each test
-		for i in `seq 1 N_TESTS`;
-		do
-			MACHINE_INDEX=rand8
-			machine="eris-test-$SWARM-$MACHINE_INDEX"
-			create_machine $machine &
-			set_procs $machine
-		done 
-		wait_procs
-		check_procs
-		if [[ $? -ne 0 ]]; then
-			# TODO: remove machines that did start and exit
+			machines=${machs[@]}
+			echo "using given machines: ${machines[@]}"
+		else
+			# launch one machine for each test
+			echo "launching one machine for each of the $N_TESTS tests:"
+				echo " - $REPO_TO_TEST $build_script" # print repo and build script
+			for t in "${TESTS[@]}"; do
+				echo " - ${t[0]}: ${t[1]}" # print repo and build script
+			done
+
+			for i in `seq 1 $N_TESTS`;
+			do
+				if [[ "$i" -ne 1 ]]; then
+					test=${TESTS[$((i-2))]}
+					thisRepo=${test[0]}
+					base=$(basename $thisRepo)
+				else
+					base="$TOOL-local" # for the repos own tests
+				fi
+				MACHINE_INDEX=$(rand8)
+				machine="eris-test-$SWARM-$base-$MACHINE_INDEX"
+				create_machine $machine &
+				set_procs $machine
+				echo "... initialized machine creation for $machine"
+			done 
+			echo "Waiting for machines to start ..."
+			wait_procs
+			echo "All machines started!"
+			check_procs
+			if [[ $? -ne 0 ]]; then
+				echo "remove machines that started and exit ..."
+				# TODO: remove machines that started and exit
+			fi
+			machines=${launch_procs[@]}
+			clear_procs
+			echo "done launching machines"
 		fi
-		machines=${launch_procs[@]}
-		clear_procs
+
 
 		# create an id for log files for this run
-		logID=rand8
-		logFolder=/var/log/eris_integration_tests_$logID
+		logID=$(rand8)
+		logFolder="$HOME/integration_test_logs/eris_integration_tests_$logID"
 		mkdir -p $logFolder
+
+		# fetch the run_test.sh script 
+		echo "fetching run_test.sh script for individual tests"
+		curl https://raw.githubusercontent.com/eris-ltd/integration-tests/master/run_test.sh > $HOME/run_test.sh
 
 		# now loop over all the machines and run a test on each one
 		# the first machine gets the local test, all others get an integrations test from $TESTS
 		i=0
 		for mach in "${!machines[@]}"
 		do
+			echo "Running test $i with machine $mach"
 			if [[ $i -ne 0 ]]; then
 				# the integration tests get logged into files watched by papertrail
-				runIntegrationTest $i $logFolder &
+				bash $HOME/run_test.sh "integration" $mach $i $logFolder &
 				set_procs $i
 			else
 				# the base test gets logged in circle
-				runLocalTest $build_script &
+				bash $HOME/run_test.sh "local" $mach $repo/$build_script &
 				set_procs $i
 			fi
 			i=$((i+1))
 	    	done
+		echo "Waiting for all tests to finish ..."
 		wait_procs # this will wait for all to finish, but we should really die as soon as something fails
+		echo "All tests finished"
 		check_procs
 		if [[ $? -ne 0 ]]; then
+			echo "remove machines that started and exit"
 			# TODO: remove machines that did start and exit
 		fi
 	else 
 		# no integration tests to run, just launch a machine and run the local test
-		MACHINE_INDEX=rand8
-		machine="eris-test-$SWARM-$MACHINE_INDEX"
+		MACHINE_INDEX=$(rand8)
+		base=$(basename $repo)
+		machine="eris-test-$SWARM-$base-$MACHINE_INDEX"
 		create_connect_machine $machine
 		echo "Succesfully created and connected to new docker machine: $machine"
 
