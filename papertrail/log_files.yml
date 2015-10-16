@@ -1,0 +1,7 @@
+
+files: 
+  - /test_logs/*
+destination:
+  host: logs3.papertrailapp.com
+  port: 30648 # NOTE: change to your Papertrail port
+  protocol: tls

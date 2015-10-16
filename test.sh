@@ -21,8 +21,6 @@ ATTRS_PER_TEST=2 # each test should have a repo and a build script
 # this is how many docker-machines we'll start
 n_TESTS=`expr ${#TESTS[@]} / $ATTRS_PER_TEST`
 N_TESTS=$((n_TESTS + 1)) 
-echo "NTESTS: $N_TESTS"
-
 
 # do any preliminary setup for integrations tests
 # like rebuilding docker images with new code
@@ -210,10 +208,8 @@ if [ "$#" -lt 1 ]; then
 	    echo "Must provide at least the location of the test folder"
 fi
 
-test_folder=$1
+test_folder=`readlink -f $1` # get full path
 machine=$2 # either "local", a machine in the matdef, or empty to create a new one
-
-echo "test folder $test_folder"
 
 # sourcing params.sh gives us:
 # - $base
@@ -239,28 +235,41 @@ branch=${branch/-/_}
 export TOOL=$(basename $base)
 export REPO_TO_TEST=$base
 
+# create an id for log files for this run
+logID=$(rand8)
+logFolder="$HOME/integration_test_logs/eris_integration_tests_$logID"
+
+LOG_CONFIG=/etc/log_files.yml
+
+cd $repo
 
 # ---------------------------------------------------------------------------
 # Get the machine definitions, connect to one, build the images
 
+echo ""
 echo "Hello! I'm the testing suite for eris."
 echo "My job is to provision docker machines from circle ci and to run tests in docker containers on them."
 echo "You pushed to $REPO_TO_TEST. Let's run its tests!"
+echo ""
 
+echo "First thing first, create log folder ($logFolder) and run a docker container to forward logs to papertrail:"
+mkdir -p $logFolder
+docker run -d --name papertrail -v $logFolder:/test_logs quay.io/eris/papertrail 
+echo ""
 
 # if this is the integrations branch, we spawn multiple machines in parallel.
 # otherwise, just one
 BRANCH=`git rev-parse --abbrev-ref HEAD`
 
 if [ "$BRANCH" == "$integration_tests_branch" ]; then
-	echo "We're on an integration test branch ($BRANCH). Run the integration tests ..."
+	echo "We're on an integration test branch ($BRANCH)."
 
 	TEST_AGAINST_BRANCH=$integration_test_against_branch
 	if [[ "$TEST_AGAINST_BRANCH" == "" ]]; then
 		TEST_AGAINST_BRANCH="master"
 	fi
 
-	echo "Integration tests will run against $TEST_AGAINST_BRANCH"
+	echo "Integration tests will run against $TEST_AGAINST_BRANCH. Fetching repos ..."
 
 	# grab all the repos except the one we're testing (use n_TESTS)
 	for i in `seq 1 $n_TESTS` 
@@ -274,6 +283,9 @@ if [ "$BRANCH" == "$integration_tests_branch" ]; then
 		fi
 	done
 
+	echo "Done fetching repos for integration tests"
+	echo ""
+
 	# optionally specify machines to run the tests on
 	machs=(${@:2})
 	if [[ "$machs" != "" ]]; then
@@ -284,11 +296,11 @@ if [ "$BRANCH" == "$integration_tests_branch" ]; then
 		fi
 
 		machines=(${machs[@]})
-		echo "using given machines: ${machines[@]}"
+		echo "Using given machines: ${machines[@]}"
 	else
 		NEW_MACHINE=true
 		# launch one machine for each test
-		echo "launching one machine for each of the $N_TESTS tests:"
+		echo "Launching one machine for each of the $N_TESTS tests:"
 			echo " - $REPO_TO_TEST $build_script" # print repo and build script
 		for i in `seq 1 $n_TESTS`; do 
 			j=`expr $((i - 1)) \* 2` # index into quasi-multi-D-array
@@ -313,27 +325,27 @@ if [ "$BRANCH" == "$integration_tests_branch" ]; then
 		done 
 		echo "Waiting for machines to start ..."
 		wait_procs
-		echo "All machines started!"
 		check_procs
 		if [[ $? -ne 0 ]]; then
-			echo "remove machines that started and exit ..."
-			# TODO: remove machines that started and exit
+			echo "Error starting a machine. Removing machines ..."
+			for mach in "${launch_procs[@]}"; do
+				docker-machine rm -f $mach
+			done
+			exit 1
 		fi
-		machines=($launch_procs)
+		echo "All machines started!"
+		machines=(${!launch_procs[@]})
 		clear_procs
-		echo "done launching machines"
+		echo "Done launching machines"
 	fi
 
-
-	# create an id for log files for this run
-	logID=$(rand8)
-	logFolder="$HOME/integration_test_logs/eris_integration_tests_$logID"
-	echo "Creating log folder: $logFolder"
-	mkdir -p $logFolder
-
 	# fetch the run_test.sh script 
-	echo "fetching run_test.sh script for individual tests"
+	echo ""
+	echo "Fetching run_test.sh script for individual tests"
 	curl https://raw.githubusercontent.com/eris-ltd/integration-tests/master/run_test.sh > $HOME/run_test.sh
+	echo ""
+
+	echo "Run a test with each machine (${machines[@]})"
 
 	# now loop over all the machines and run a test on each one
 	# the first machine gets the local test, all others get an integrations test from $TESTS
@@ -423,6 +435,8 @@ fi
 
 cat $RESULTS_FILE
 
+rm $RESULTS_FILE
+
 echo ""
 echo ""
 if [[ "$NEW_MACHINE" == "true" ]];
@@ -435,6 +449,10 @@ then
 	echo ""
 	echo ""
 fi
+
+docker stop papertrail > /dev/null
+docker rm -v papertrail > /dev/null
+
 
 if [[ "$test_exit" == "1" ]]; then
 	echo "Done. Some tests failed."
