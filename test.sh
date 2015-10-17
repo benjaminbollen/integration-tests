@@ -294,6 +294,10 @@ if [ "$BRANCH" == "$integration_tests_branch" ]; then
 	echo "Done fetching repos for integration tests"
 	echo ""
 
+	if [[ "$REPO_TO_TEST" != "github.com/eris-ltd/eris-cli" ]]; then
+		go get github.com/eris-ltd/eris-cli/cmd/eris
+	fi
+
 	# optionally specify machines to run the tests on
 	machs=(${@:2})
 	if [[ "$machs" != "" ]]; then
