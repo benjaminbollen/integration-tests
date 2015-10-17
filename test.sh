@@ -28,6 +28,7 @@ N_TESTS=$((n_TESTS + 1))
 # NOTE: these need to run on each machine
 # NOTE: this is a place for custom options for each repo. Don't forget to pull a repo that's not present
 # TODO: move this to each params.sh
+# TODO: pulling repo shouldn't happen on each machine
 setupForTests(){
 	case $TOOL in
 	"eris-cli" )  # installed already by circle
@@ -111,6 +112,7 @@ connect_machine(){
 	echo "* connecting to machine $1"
 	eval $(docker-machine env $1)
 	ifExit "failed to connect to $1"
+	yes | docker-machine regenerate-certs $1
 }
 
 export -f connect_machine
@@ -197,7 +199,7 @@ log_results() {
   then
     echo "$1 is Green!" >> $RESULTS_FILE
   else
-    "$1 is Red. :(" >> $RESULTS_FILE
+    echo "$1 is Red. :(" >> $RESULTS_FILE
   fi
 }
 
