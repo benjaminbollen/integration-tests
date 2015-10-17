@@ -4,6 +4,7 @@ SWARM="dca1"
 
 # repos with integration tests
 # add to $TESTS to add more integration tests
+# these repos will be pulled so we can run the tests in them
 # TODO: break these up so we can pick which tests to run based on what was pushed to
 # (ie. mindy/mint-client tests dont need to run when js is updated)
 TEST_MINT_CLIENT=("github.com/eris-ltd/mint-client" "DOCKER/eris-cli/build.sh")
@@ -25,11 +26,16 @@ N_TESTS=$((n_TESTS + 1))
 # do any preliminary setup for integrations tests
 # like rebuilding docker images with new code
 # NOTE: these need to run on each machine
+# NOTE: this is a place for custom options for each repo. Don't forget to pull a repo that's not present
+# TODO: move this to each params.sh
 setupForTests(){
 	case $TOOL in
 	"eris-cli" )  # installed already by circle
 		;;
-	"mint-client" )  cd $GOPATH/src/github.com/eris-ltd/eris-db; docker build -t eris/erisdb:$ERIS_VERISON -f ./DOCKER/Dockerfile .
+	"mint-client" )  
+		git clone https://github.com/eris-ltd/eris-db $GOPATH/src/github.com/eris-ltd/eris-db
+		cd $GOPATH/src/github.com/eris-ltd/eris-db
+		docker build -t eris/erisdb:$ERIS_VERISON -f ./DOCKER/Dockerfile .
 		;; 
 	"eris-db" )  cd $GOPATH/src/github.com/eris-ltd/eris-db; docker build -t eris/erisdb:$ERIS_VERISON -f ./DOCKER/Dockerfile .
 		;;
@@ -371,10 +377,9 @@ if [ "$BRANCH" == "$integration_tests_branch" ]; then
 	wait_procs # this will wait for all to finish, but we should really die as soon as something fails
 	echo "All tests finished"
 	check_procs
-	if [[ $? -ne 0 ]]; then
-		echo "remove machines that started and exit"
-		# TODO: remove machines that did start and exit
-	fi
+	#if [[ $? -ne 0 ]]; then
+	#	a test failed. it's caught at the end
+	#fi
 else 
 	# no integration tests to run, just launch a machine and run the local test
 	echo "We're not on an integration branch. Just run the local tests ..."
