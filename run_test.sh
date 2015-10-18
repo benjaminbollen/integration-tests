@@ -9,13 +9,17 @@ runIntegrationTest(){
     thisRepo=$2
     build_script=$3
     log_folder=$4
-    echo "* integration test $thisRepo ($build_script) on machine $machine"
-    connect_machine $machine
-
     base=$(basename $thisRepo)
+    echo "* integration test $thisRepo ($build_script) on machine $machine"
+    if [[ "$INTEGRATION_TESTS_CONCURRENT" == "true" ]]; then
+	    connect_machine $machine
+	    if [[ "$INTEGRATION_TESTS_REGENERATE_CERTS" == "true" ]]; then
+		yes | docker-machine regenerate-certs $1
+	    fi
 
-    echo "... run pre events for $base"
-    setupForTests > "$log_folder/$base-setup"
+	    echo "... run pre events for $base"
+	    setupForTests > "$log_folder/$base-setup"
+    fi
 
     echo ""
     echo "... building/running tests for $thisRepo using $build_script"
@@ -26,7 +30,7 @@ runIntegrationTest(){
 
     # logging the exit code
     test_exit=$(echo $?)
-    log_results $machine $test_exit
+    log_results "$thisRepo ($build_script)" $test_exit
 
     echo " ... done tests for $thisRepo ($build_script) !"
 }
@@ -34,15 +38,20 @@ runIntegrationTest(){
 # runLocalTest(machine, build_script, logFolder)
 runLocalTest(){
     echo "* local test on $1"
-    connect_machine $1
+    if [[ "$INTEGRATION_TESTS_CONCURRENT" == "true" ]]; then
+	    connect_machine $1
+	    if [[ "$INTEGRATION_TESTS_REGENERATE_CERTS" == "true" ]]; then
+		yes | docker-machine regenerate-certs $1
+	    fi
 
-    echo "... run pre events for $TOOL (local)"
-    setupForTests > "$3/$TOOL-local-setup"
+	    echo "... run pre events for $TOOL (local)"
+	    setupForTests > "$3/$TOOL-local-setup"
+    fi
 
     echo "... building/running tests for $TOOL (local) using $2"
     $2 > "$3/$TOOL-local"
     test_exit=$(echo $?)
-    log_results $1 $test_exit
+    log_results "$TOOL (local)" $test_exit
 
     echo " ... done tests for $TOOL (local)"
 }
