@@ -244,7 +244,12 @@ export REPO_TO_TEST=$base
 
 # create an id for log files for this run
 logID=$(rand8)
-logFolder="$HOME/integration_test_logs/eris_integration_tests_$logID"
+if [ "$CIRCLE_ARTIFACTS" ]
+then
+	LOG_FOLDER="$CIRCLE_ARTIFACTS"
+else
+	LOG_FOLDER="$HOME/integration_test_logs/eris_integration_tests_$logID"
+fi
 
 LOG_CONFIG=/etc/log_files.yml
 
@@ -253,15 +258,19 @@ cd $repo
 # ---------------------------------------------------------------------------
 # Get the machine definitions, connect to one, build the images
 
-echo ""
+echo "******************"
 echo "Hello! I'm the testing suite for eris."
 echo "My job is to provision docker machines from circle ci and to run tests in docker containers on them."
 echo "You pushed to $REPO_TO_TEST. Let's run its tests!"
 echo ""
 
-echo "First thing first, create log folder ($logFolder) and run a docker container to forward logs to papertrail:"
-mkdir -p $logFolder
-docker run -d --name papertrail -v $logFolder:/test_logs quay.io/eris/papertrail 
+if [[ "$CIRCLE_ARTIFACTS" != "" ]]; then
+	echo "Hello CIRCLE_ARTIFACTS!" > $CIRCLE_ARTIFACTS/hello
+fi
+
+echo "First thing first, create log folder ($LOG_FOLDER) and run a docker container to forward logs to papertrail:"
+mkdir -p $LOG_FOLDER
+docker run -d --name papertrail -v $LOG_FOLDER:/test_logs quay.io/eris/papertrail 
 echo ""
 
 # if this is the integrations test, we have more tests to run
@@ -295,6 +304,7 @@ if [ "$BRANCH" == "$integration_tests_branch" ]; then
 	# we also need eris-cli. TODO: drop this requirement by getting tests to use eris-cli in docker
 	if [[ "$REPO_TO_TEST" != "github.com/eris-ltd/eris-cli" ]]; then
 		go get github.com/eris-ltd/eris-cli/cmd/eris
+		yes | eris init
 	fi
 
 	# optionally specify machines to run the tests on
@@ -387,10 +397,10 @@ if [ "$BRANCH" == "$integration_tests_branch" ]; then
 				k=`expr $((i - 1)) \* 2 + 1` # index into quasi-multi-D-array
 				thisRepo="${TESTS[$j]}"
 				build_script="${TESTS[$k]}"
-				bash $HOME/run_test.sh "integration" $mach $thisRepo $build_script $logFolder &
+				bash $HOME/run_test.sh "integration" $mach $thisRepo $build_script $LOG_FOLDER &
 				set_procs $i
 			else
-				bash $HOME/run_test.sh "local" $mach $repo/$build_script $logFolder &
+				bash $HOME/run_test.sh "local" $mach $repo/$build_script $LOG_FOLDER &
 				set_procs $i
 			fi
 			i=$((i+1))
@@ -409,11 +419,11 @@ if [ "$BRANCH" == "$integration_tests_branch" ]; then
 	    	connect_machine $mach
 
 		echo "* run pre events for $TOOL"
-		setupForTests > "$log_folder/$TOOL-setup"
+		setupForTests > "$LOG_FOLDER/$TOOL-setup"
 
 		# first run the local tests
 		echo "* run the local tests"
-		bash $HOME/run_test.sh "local" $mach $repo/$build_script $logFolder
+		bash $HOME/run_test.sh "local" $mach $repo/$build_script $LOG_FOLDER
 
 		# now the integration tests
 		echo "* run the integration tests"
@@ -423,7 +433,7 @@ if [ "$BRANCH" == "$integration_tests_branch" ]; then
 			k=`expr $((i - 1)) \* 2 + 1` # index into quasi-multi-D-array
 			thisRepo="${TESTS[$j]}"
 			build_script="${TESTS[$k]}"
-			bash $HOME/run_test.sh "integration" $mach $thisRepo $build_script $logFolder
+			bash $HOME/run_test.sh "integration" $mach $thisRepo $build_script $LOG_FOLDER
 		done
 	fi
 else 
