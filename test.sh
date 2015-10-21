@@ -302,10 +302,10 @@ if [ "$BRANCH" == "$integration_tests_branch" ]; then
 	echo ""
 
 	# we also need eris-cli. TODO: drop this requirement by getting tests to use eris-cli in docker
-	if [[ "$REPO_TO_TEST" != "github.com/eris-ltd/eris-cli" ]]; then
-		go get github.com/eris-ltd/eris-cli/cmd/eris
-		yes | eris init
-	fi
+#	if [[ "$REPO_TO_TEST" != "github.com/eris-ltd/eris-cli" ]]; then
+#		go get github.com/eris-ltd/eris-cli/cmd/eris
+#		yes | eris init
+#	fi
 
 	# optionally specify machines to run the tests on
 	machs=(${@:2})
