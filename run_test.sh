@@ -29,10 +29,15 @@ runIntegrationTest(){
     $build_script > $log_folder/$base
 
     # logging the exit code
-    test_exit=$(echo $?)
+    test_exit=$?
     log_results "$thisRepo ($build_script)" $test_exit
 
     echo " ... done tests for $thisRepo ($build_script) !"
+    if [[ "$test_ext" == 0 ]]; then 
+	echo "****** PASS ******"
+    else
+	echo "****** FAIL ******"
+    fi
 }
 
 # runLocalTest(machine, build_script, logFolder)
@@ -50,10 +55,14 @@ runLocalTest(){
 
     echo "... building/running tests for $TOOL (local) using $2"
     $2 > "$3/$TOOL-local"
-    test_exit=$(echo $?)
+    test_exit=$?
     log_results "$TOOL (local)" $test_exit
-
     echo " ... done tests for $TOOL (local)"
+    if [[ "$test_ext" == 0 ]]; then 
+	echo "****** PASS ******"
+    else
+	echo "****** FAIL ******"
+    fi
 }
 
 # params
