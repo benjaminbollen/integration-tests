@@ -19,7 +19,6 @@ TESTS=(
 ATTRS_PER_TEST=2 # each test should have a repo and a build script
 
 # one for each integration test plus the native test for the repo
-# this is how many docker-machines we'll start
 n_TESTS=`expr ${#TESTS[@]} / $ATTRS_PER_TEST`
 N_TESTS=$((n_TESTS + 1)) 
 
@@ -28,7 +27,6 @@ N_TESTS=$((n_TESTS + 1))
 # NOTE: these need to run on each machine
 # NOTE: this is a place for custom options for each repo. Don't forget to pull a repo that's not present
 # TODO: move this to each params.sh
-# TODO: pulling repo shouldn't happen on each machine
 setupForTests(){
 	case $TOOL in
 	"eris-cli" )  # installed already by circle
@@ -194,7 +192,7 @@ touch $RESULTS_FILE
 
 # params (machine, test_exit)
 log_results() {
-  if [ "$2" -eq 0 ]
+  if [[ "$2" == "0" ]]
   then
     echo "$1 is Green!" >> $RESULTS_FILE
   else
@@ -256,7 +254,7 @@ LOG_CONFIG=/etc/log_files.yml
 cd $repo
 
 # ---------------------------------------------------------------------------
-# Get the machine definitions, connect to one, build the images
+# Go!
 
 echo "******************"
 echo "Hello! I'm the testing suite for eris."
@@ -300,12 +298,6 @@ if [ "$BRANCH" == "$integration_tests_branch" ]; then
 
 	echo "Done fetching repos for integration tests"
 	echo ""
-
-	# we also need eris-cli. TODO: drop this requirement by getting tests to use eris-cli in docker
-#	if [[ "$REPO_TO_TEST" != "github.com/eris-ltd/eris-cli" ]]; then
-#		go get github.com/eris-ltd/eris-cli/cmd/eris
-#		yes | eris init
-#	fi
 
 	# optionally specify machines to run the tests on
 	machs=(${@:2})
@@ -379,7 +371,7 @@ if [ "$BRANCH" == "$integration_tests_branch" ]; then
 
 	# fetch the run_test.sh script 
 	echo ""
-	echo "Fetching run_test.sh script for individual tests"
+	echo "Fetching run_test.sh script to run each test"
 	curl https://raw.githubusercontent.com/eris-ltd/integration-tests/master/run_test.sh > $HOME/run_test.sh
 	echo ""
 
@@ -476,8 +468,8 @@ else
 	$build_script 
 
 	# logging the exit code
-	test_exit=$(echo $?)
-	log_results
+	test_exit=$?
+	log_results "$repo  ($build_script)" $test_exit
 fi
 
 
