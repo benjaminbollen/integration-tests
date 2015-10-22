@@ -33,7 +33,7 @@ runIntegrationTest(){
     log_results "$thisRepo ($build_script)" $test_exit
 
     echo " ... done tests for $thisRepo ($build_script) !"
-    if [[ "$test_ext" == 0 ]]; then 
+    if [[ "$test_exit" == 0 ]]; then 
 	echo "****** PASS ******"
     else
 	echo "****** FAIL ******"
@@ -42,23 +42,26 @@ runIntegrationTest(){
 
 # runLocalTest(machine, build_script, logFolder)
 runLocalTest(){
+    mach=$1
+    bscript=$2
+    logFolder=$3
     echo "* local test on $1"
     if [[ "$INTEGRATION_TESTS_CONCURRENT" == "true" ]]; then
-	    connect_machine $1
+	    connect_machine $mach
 	    if [[ "$INTEGRATION_TESTS_REGENERATE_CERTS" == "true" ]]; then
-		yes | docker-machine regenerate-certs $1
+		yes | docker-machine regenerate-certs $mach
 	    fi
 
 	    echo "... run pre events for $TOOL (local)"
-	    setupForTests > "$3/$TOOL-local-setup"
+	    setupForTests > "$logFolder/$TOOL-local-setup"
     fi
 
-    echo "... building/running tests for $TOOL (local) using $2"
-    $2 > "$3/$TOOL-local"
+    echo "... building/running tests for $TOOL (local) using $bscript"
+    $bscript > "$logFolder/$TOOL-local"
     test_exit=$?
     log_results "$TOOL (local)" $test_exit
     echo " ... done tests for $TOOL (local)"
-    if [[ "$test_ext" == 0 ]]; then 
+    if [[ "$test_exit" == 0 ]]; then 
 	echo "****** PASS ******"
     else
 	echo "****** FAIL ******"

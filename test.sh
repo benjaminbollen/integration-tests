@@ -240,13 +240,13 @@ branch=${branch/-/_}
 export TOOL=$(basename $base)
 export REPO_TO_TEST=$base
 
-# create an id for log files for this run
-logID=$(rand8)
+# create an id for the machine and its log files for this run
+MACHINE_INDEX=$(rand8)
 if [ "$CIRCLE_ARTIFACTS" ]
 then
 	LOG_FOLDER="$CIRCLE_ARTIFACTS"
 else
-	LOG_FOLDER="$HOME/integration_test_logs/eris_integration_tests_$logID"
+	LOG_FOLDER="$HOME/integration_test_logs/eris_integration_tests_$MACHINE_INDEX"
 fi
 
 LOG_CONFIG=/etc/log_files.yml
@@ -361,7 +361,6 @@ if [ "$BRANCH" == "$integration_tests_branch" ]; then
 			clear_procs
 		else
 			# launch one machine to run all tests
-			MACHINE_INDEX=$(rand8)
 			machine="eris-test-$SWARM-it-$TOOL-$MACHINE_INDEX"
 			create_machine $machine
 			machines=($machine)
@@ -435,7 +434,6 @@ else
 	if [[ $machine == "" ]]; then
 		NEW_MACHINE="true"
 
-		MACHINE_INDEX=$(rand8)
 		base=$(basename $repo)
 		machine="eris-test-$SWARM-$base-$MACHINE_INDEX"
 		create_connect_machine $machine
