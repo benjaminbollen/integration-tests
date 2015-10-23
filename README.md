@@ -7,8 +7,23 @@ This repo provides shell scripts for two testing goals:
 2) run a suite of cross-repository tests when certain repos push to a "staging" branch 
 
 We assume repos that want to run integration tests have their own tests to run along with the integration tests,
-and that these will also run using our provisioned docker machine/s.
+and that these will also run using our provisioned docker machine/s. 
 
+The local tests run regardless of the branch being pushed to, and run before the integration tests when pushing to `staging`.
+
+# Parameterization
+
+Options for testing should be specified as environment variables in the circle.yml.
+
+Variables that _must_ be specified include:
+
+```
+machine:
+  environment:
+    REPO: $GOPATH/src/github.com/eris-ltd/mindy # full path to the repository 
+    BUILD_SCRIPT: test/plumbing/build.sh # test script for the repo's local test (relative to $REPO)
+    INTEGRATION_TESTS_PATH: $HOME/integration-tests # where the integration-tests repo should be cloned to
+```
 
 Testing with docker-machine
 ---------------------------
@@ -24,27 +39,18 @@ dependencies:
     - "sudo curl -sSL -o /usr/local/bin/docker-machine https://github.com/docker/machine/releases/download/v$DOCKER_MACHINE_VERSION/docker-machine_linux-amd64 && sudo chmod +x /usr/local/bin/docker-machine"
 ```
 
-You can set all the `$DOCKER` variables in your admin panel for the repo on circleci.com. We use `quay.io` for docker images, rather than the default, `hub.docker.com`, because it's been more reliable.
+You can set all the `$DOCKER` variables in your admin panel for the repo on circleci.com. 
 
 Now, to actually run your tests using your docker machines,
 
 ```
 test:
   override:
-    - curl https://raw.githubusercontent.com/eris-ltd/integration-tests/master/test.sh > $HOME/test.sh && bash $HOME/test.sh $REPO/tests $MACHINE_NAME
+    - git clone https://github.com/eris-ltd/integration-tests $HOME/integration-tests
+    - bash $INTEGRATION_TESTS_PATH/test.sh $MACHINE_NAME
 ```
 
-Here we are fetching the `test.sh` script from the integration tests repo and running it on the `tests` folder in the repo we're testing, where `$REPO` is the full path (presumably on the GOPATH). `$MACHINE_NAME` is the name of the docker-machine to use, if it is already provisioned (and included in the `eris/test_machines` image). If `$MACHINE_NAME` is empty, a new machine will be provisioned. 
-
-The tests folder should have everything required for running your tests. In addition, it must contain a `params.sh` file looking like:
-
-```
-# path in the GOPATH
-export base=github.com/eris-ltd/mindy
-
-# scripts for building containers and running dependency containers
-export build_script=test/plumbing/build.sh
-```
+In this case, we wish to use machine `$MACHINE_NAME`. If the machine name is left empty, a new one will be provisioned.
 
 To ensure provisioning of new docker machines works, the following environment variables must be set through the admin panels on circlci.com:
 
@@ -63,12 +69,12 @@ Integration tests with docker-machine
 
 When any of some set of repositories is pushed to a `staging` branch (possibly `develop`), we would like to run a set of tests, spanning across multiple repos.
 
-Details for which tests will be run can be found in `integration_tests.sh`. To run these tests when pushing to the `staging` branch, add the following to the params.sh
+The tests that will be run can be found at the top of `test.sh`. To run these tests when pushing to the `staging` branch, add the following to the environment variables in circle.yml:
 
 ```
-integration_tests_branch=staging
+INTEGRATION_TESTS_BRANCH: staging
 ```
 
 Of course you can replace `staging` by anything. If the variable is blank, no integration tests will be run.
 
-You can also specify the branch all other repos should be on for the integrations test by setting `integration_test_against_branch`.
+You can also specify the branch all other repos should be on for the integrations test by setting `INTEGRATION_TEST_AGAINST_BRANCH`.

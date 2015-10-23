@@ -7,8 +7,8 @@ SWARM="dca1"
 # these repos will be pulled so we can run the tests in them
 # TODO: break these up so we can pick which tests to run based on what was pushed to
 # (ie. mindy/mint-client tests dont need to run when js is updated)
-TEST_MINT_CLIENT=("github.com/eris-ltd/mint-client" "DOCKER/eris-cli/build.sh")
-TEST_MINDY=("github.com/eris-ltd/mindy" "test/porcelain/build.sh")
+TEST_MINT_CLIENT=("github.com/eris-ltd/mint-client" "DOCKER/eris-cli/build.sh" "$GOPATH/src/github.com/eris-ltd/mint-client")
+TEST_MINDY=("github.com/eris-ltd/mindy" "test/porcelain/build.sh" "$GOPATH/src/github.com/eris-ltd/mindy")
 
 # each pair is serialized into a string
 TESTS=(
@@ -16,10 +16,10 @@ TESTS=(
 	"${TEST_MINDY[@]}" 
 )
 
-ATTRS_PER_TEST=2 # each test should have a repo and a build script
+N_ATTRS=3 # each test should have a remote repo, a build script, and a path to clone to
 
 # one for each integration test plus the native test for the repo
-n_TESTS=`expr ${#TESTS[@]} / $ATTRS_PER_TEST`
+n_TESTS=`expr ${#TESTS[@]} / $N_ATTRS`
 N_TESTS=$((n_TESTS + 1)) 
 
 # do any preliminary setup for integrations tests
@@ -187,9 +187,6 @@ reset_swarm() {
 }
 
 
-export RESULTS_FILE=$HOME/integration-tests-results
-touch $RESULTS_FILE
-
 # params (machine, test_exit)
 log_results() {
   if [[ "$2" == "0" ]]
@@ -209,36 +206,38 @@ export -f log_results
 
 machine_definitions=matDef
 
-if [ "$#" -lt 1 ]; then
-	    echo "Must provide at least the location of the test folder"
+machine=$1 # either "local", a machine in the matdef, or empty to create a new one
+
+
+if [[ "$REPO" == "" ]]; then
+	echo "must specify full path to the repo in $REPO"
+	exit 1
 fi
 
-test_folder=`readlink -f $1` # get full path
-machine=$2 # either "local", a machine in the matdef, or empty to create a new one
+if [[ "$BUILD_SCRIPT" == "" ]]; then
+	echo "must specify relative path to build script from the $REPO in $BUILD_SCRIPT"
+	exit 1
+fi
 
-# sourcing params.sh gives us:
-# - $base
-# - $build_script
-source $test_folder/params.sh
+if [[ "$INTEGRATION_TESTS_PATH" == "" ]]; then
+	echo "must specify full path to the integrations-test repo"
+	exit 1
+fi
+
 
 # ----------------------------------------------------------------------------
 # Set definitions and defaults
 
-# Where are the Things 
 if [ "$CIRCLE_BRANCH" ]
 then
-  repo=${GOPATH%%:*}/src/github.com/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}
-  circle=true
+  IN_CIRCLE=true
 else
-  repo=$GOPATH/src/$base
-  circle=false
+  IN_CIRCLE=false
 fi
-branch=${CIRCLE_BRANCH:=master}
-branch=${branch/-/_}
 
 
-export TOOL=$(basename $base)
-export REPO_TO_TEST=$base
+export TOOL=$(basename $REPO)
+export REPO_TO_TEST=$TOOL
 
 # create an id for the machine and its log files for this run
 MACHINE_INDEX=$(rand8)
@@ -249,9 +248,13 @@ else
 	LOG_FOLDER="$HOME/integration_test_logs/eris_integration_tests_$MACHINE_INDEX"
 fi
 
+
+export RESULTS_FILE=$HOME/integration-tests-results
+touch $RESULTS_FILE
+
 LOG_CONFIG=/etc/log_files.yml
 
-cd $repo
+cd $REPO
 
 # ---------------------------------------------------------------------------
 # Go!
@@ -274,25 +277,26 @@ echo ""
 # if this is the integrations test, we have more tests to run
 BRANCH=`git rev-parse --abbrev-ref HEAD`
 
-if [ "$BRANCH" == "$integration_tests_branch" ]; then
+if [ "$BRANCH" == "$INTEGRATION_TESTS_BRANCH" ]; then
 	echo "We're on an integration test branch ($BRANCH)."
 
-	TEST_AGAINST_BRANCH=$integration_test_against_branch
-	if [[ "$TEST_AGAINST_BRANCH" == "" ]]; then
-		TEST_AGAINST_BRANCH="master"
+	if [[ "$INTEGRATION_TEST_AGAINST_BRANCH" == "" ]]; then
+		INTEGRATION_TEST_AGAINST_BRANCH="master"
 	fi
 
-	echo "Integration tests will run against $TEST_AGAINST_BRANCH. Fetching repos ..."
+	echo "Integration tests will run against $INTEGRATION_TEST_AGAINST_BRANCH. Fetching repos ..."
 
 	# grab all the repos except the one we're testing (use n_TESTS)
 	for i in `seq 1 $n_TESTS` 
 	do
-		j=`expr $((i - 1)) \* 2` # index into quasi-multi-D-array
+		j=`expr $((i - 1)) \* $N_ATTRS` # index into quasi-multi-D-array
+		k=`expr $((i - 1)) \* $N_ATTRS + 2` # index into quasi-multi-D-array
 		nextRepo=${TESTS[$j]}
-		if [ "$nextRepo" != "$REPO_TO_TEST" ];  then
-			wd=$GOPATH/src/$nextRepo
+		if [ "$(basename $nextRepo)" != "$REPO_TO_TEST" ];  then
+			wd=${TESTS[$k]}
+			mkdir -p $wd
 			git clone https://$nextRepo $wd
-			cd $wd; git checkout $TEST_AGAINST_BRANCH
+			cd $wd; git checkout $INTEGRATION_TEST_AGAINST_BRANCH
 		fi
 	done
 
@@ -300,7 +304,7 @@ if [ "$BRANCH" == "$integration_tests_branch" ]; then
 	echo ""
 
 	# optionally specify machines to run the tests on
-	machs=(${@:2})
+	machs=(${@:1})
 	if [[ "$machs" != "" ]]; then
 		# if machs are given, there is either one for all tests, or enough to run all in parallel
 		n_machs="${#machs[@]}" 
@@ -322,10 +326,10 @@ if [ "$BRANCH" == "$integration_tests_branch" ]; then
 			echo "Launching one machine to run all $N_TESTS tests:"
 		fi
 		# print tests to run
-		echo " - $REPO_TO_TEST $build_script" # print repo and build script
+		echo " - $REPO_TO_TEST $BUILD_SCRIPT" # print repo and build script
 		for i in `seq 1 $n_TESTS`; do 
-			j=`expr $((i - 1)) \* 2` # index into quasi-multi-D-array
-			k=`expr $((i - 1)) \* 2 + 1`  # index into quasi-multi-D-array
+			j=`expr $((i - 1)) \* $N_ATTRS` # index into quasi-multi-D-array
+			k=`expr $((i - 1)) \* $N_ATTRS + 1`  # index into quasi-multi-D-array
 			echo " - ${TESTS[$j]}: ${TESTS[$k]}" # print repo and build script
 		done
 
@@ -334,7 +338,7 @@ if [ "$BRANCH" == "$integration_tests_branch" ]; then
 			for i in `seq 1 $N_TESTS`;
 			do
 				if [[ "$i" -ne 1 ]]; then
-					j=`expr $((i - 2)) \* 2` # index into quasi-multi-D-array
+					j=`expr $((i - 2)) \* $N_ATTRS` # index into quasi-multi-D-array
 					thisRepo="${TESTS[$j]}"
 					base=$(basename $thisRepo)
 				else
@@ -368,12 +372,6 @@ if [ "$BRANCH" == "$integration_tests_branch" ]; then
 		echo "Done launching machines"
 	fi
 
-	# fetch the run_test.sh script 
-	echo ""
-	echo "Fetching run_test.sh script to run each test"
-	curl https://raw.githubusercontent.com/eris-ltd/integration-tests/master/run_test.sh > $HOME/run_test.sh
-	echo ""
-
 	if [[ "$INTEGRATION_TESTS_CONCURRENT" == "true" ]]; then
 		echo "Run a test with each machine (${machines[@]})"
 		# now loop over all the machines and run a test on each one
@@ -384,14 +382,14 @@ if [ "$BRANCH" == "$integration_tests_branch" ]; then
 			echo "Running test $i with machine $mach"
 			# everything gets logged into files watched by papertrail
 			if [[ $i -ne 0 ]]; then
-				j=`expr $((i - 1)) \* 2` # index into quasi-multi-D-array
-				k=`expr $((i - 1)) \* 2 + 1` # index into quasi-multi-D-array
-				thisRepo="${TESTS[$j]}"
-				build_script="${TESTS[$k]}"
-				bash $HOME/run_test.sh "integration" $mach $thisRepo $build_script $LOG_FOLDER &
+				j=`expr $((i - 1)) \* $N_ATTRS + 1` # index into quasi-multi-D-array
+				k=`expr $((i - 1)) \* $N_ATTRS + 2` # index into quasi-multi-D-array
+				build_script="${TESTS[$j]}"
+				thisRepo="${TESTS[$k]}"
+				bash $INTEGRATION_TESTS_PATH/run_test.sh "integration" $mach $thisRepo $build_script $LOG_FOLDER &
 				set_procs $i
 			else
-				bash $HOME/run_test.sh "local" $mach $repo/$build_script $LOG_FOLDER &
+				bash $INTEGRATION_TESTS_PATH/run_test.sh "local" $mach $REPO $BUILD_SCRIPT $LOG_FOLDER &
 				set_procs $i
 			fi
 			i=$((i+1))
@@ -413,29 +411,28 @@ if [ "$BRANCH" == "$integration_tests_branch" ]; then
 		setupForTests > "$LOG_FOLDER/$TOOL-setup"
 
 		# first run the local tests
-		echo "* run the local tests"
-		bash $HOME/run_test.sh "local" $mach $repo/$build_script $LOG_FOLDER
+		echo "First, run the local tests"
+		bash $INTEGRATION_TESTS_PATH/run_test.sh "local" $mach $REPO $BUILD_SCRIPT $LOG_FOLDER
 
 		# now the integration tests
-		echo "* run the integration tests"
+		echo "Now, run the integration tests"
 		for ii in `seq 1 $n_TESTS`; do
 			i=`expr $ii - 1`
-			j=`expr $((i - 1)) \* 2` # index into quasi-multi-D-array
-			k=`expr $((i - 1)) \* 2 + 1` # index into quasi-multi-D-array
-			thisRepo="${TESTS[$j]}"
-			build_script="${TESTS[$k]}"
-			bash $HOME/run_test.sh "integration" $mach $thisRepo $build_script $LOG_FOLDER
+			j=`expr $((i - 1)) \* $N_ATTRS + 1` # index into quasi-multi-D-array
+			k=`expr $((i - 1)) \* $N_ATTRS + 2` # index into quasi-multi-D-array
+			build_script="${TESTS[$j]}"
+			thisRepo="${TESTS[$k]}"
+			bash $INTEGRATION_TESTS_PATH/run_test.sh "integration" $mach $thisRepo $build_script $LOG_FOLDER
 		done
 	fi
 else 
 	# no integration tests to run, just launch a machine and run the local test
-	echo "We're not on an integration branch. Just run the local tests ..."
+	echo "We are not an integration branch ($BRANCH). Just run the local tests ..."
 
 	if [[ $machine == "" ]]; then
 		NEW_MACHINE="true"
 
-		base=$(basename $repo)
-		machine="eris-test-$SWARM-$base-$MACHINE_INDEX"
+		machine="eris-test-$SWARM-$TOOL-$MACHINE_INDEX"
 		create_connect_machine $machine
 		machines=( $machine )
 		echo "Succesfully created and connected to new docker machine: $machine"
@@ -444,8 +441,8 @@ else
 		# this is not meant to run on circle
 
 		if [[ $machine != "local" ]]; then
-			echo "Getting machine definition files sorted so we can connect to $2"
-			if [ "$circle" = true ]; then
+			echo "Getting machine definition files sorted so we can connect to $machine"
+			if [ "$IN_CIRCLE" = true ]; then
 			  docker pull quay.io/eris/test_machines &>/dev/null
 			  docker run --name $machine_definitions quay.io/eris/test_machines &>/dev/null
 			  rm -rf .docker &>/dev/null
@@ -454,20 +451,20 @@ else
 			  docker run --name $machine_definitions quay.io/eris/test_machines &>/dev/null
 			fi
 
-			eval $(docker-machine env $2)
+			eval $(docker-machine env $machine)
 		fi
 	fi
 
 	echo ""
-	echo "Building tests for $repo"
+	echo "Building tests for $TOOL"
 	strt=`pwd`
-	cd $repo
+	cd $REPO
 	# build and run the tests
-	$build_script 
+	$BUILD_SCRIPT
 
 	# logging the exit code
 	test_exit=$?
-	log_results "$repo  ($build_script)" $test_exit
+	log_results "$TOOL ($BUILD_SCRIPT)" $test_exit
 fi
 
 
