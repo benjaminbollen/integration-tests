@@ -2,13 +2,19 @@
 
 SWARM="dca1"
 
+###############################
 # repos with integration tests
 # add to $TESTS to add more integration tests
+
+# each test should have a remote repo, a build script, a path to clone to, and a variable that specifies the branch to checkout
+# NOTE: the branch variable must be in quotes!
+N_ATTRS=4
+
 # these repos will be pulled so we can run the tests in them
 # TODO: break these up so we can pick which tests to run based on what was pushed to
 # (ie. mindy/mint-client tests dont need to run when js is updated)
-TEST_MINT_CLIENT=("github.com/eris-ltd/mint-client" "DOCKER/eris-cli/build.sh" "$GOPATH/src/github.com/eris-ltd/mint-client")
-TEST_MINDY=("github.com/eris-ltd/mindy" "test/porcelain/build.sh" "$GOPATH/src/github.com/eris-ltd/mindy")
+TEST_MINT_CLIENT=("github.com/eris-ltd/mint-client" "DOCKER/eris-cli/build.sh" "$GOPATH/src/github.com/eris-ltd/mint-client" "$TEST_MINT_CLIENT_BRANCH")
+TEST_MINDY=("github.com/eris-ltd/mindy" "test/porcelain/build.sh" "$GOPATH/src/github.com/eris-ltd/mindy" "$TEST_MINDY_BRANCH")
 
 # each pair is serialized into a string
 TESTS=(
@@ -16,25 +22,24 @@ TESTS=(
 	"${TEST_MINDY[@]}" 
 )
 
-N_ATTRS=3 # each test should have a remote repo, a build script, and a path to clone to
-
-# one for each integration test plus the native test for the repo
-n_TESTS=`expr ${#TESTS[@]} / $N_ATTRS`
-N_TESTS=$((n_TESTS + 1)) 
+###############################
 
 # do any preliminary setup for integrations tests
 # like rebuilding docker images with new code
 # NOTE: these need to run on each machine
 # NOTE: this is a place for custom options for each repo. Don't forget to pull a repo that's not present
-# TODO: move this to each params.sh
+# TODO: move this to each repo?
 setupForTests(){
 	case $TOOL in
-	"eris-cli" )  # installed already by circle
+	"eris-cli" )  
+			# build the docker image, set the eris version
+			cd $GOPATH/src/github.com/eris-ltd/eris-cli
+			ERIS_VERSION=`git rev-parse --abbrev-ref HEAD`
+			export ERIS_VERSION
+			docker build -t quay.io/eris/eris:$ERIS_VERSION .
 		;;
 	"mint-client" )  
-		git clone https://github.com/eris-ltd/eris-db $GOPATH/src/github.com/eris-ltd/eris-db
-		cd $GOPATH/src/github.com/eris-ltd/eris-db
-		docker build -t eris/erisdb:$ERIS_VERISON -f ./DOCKER/Dockerfile .
+		docker pull quay.io/eris/erisdb:$ERIS_VERSION
 		;; 
 	"eris-db" )  cd $GOPATH/src/github.com/eris-ltd/eris-db; docker build -t eris/erisdb:$ERIS_VERISON -f ./DOCKER/Dockerfile .
 		;;
@@ -214,19 +219,31 @@ if [[ "$REPO" == "" ]]; then
 	exit 1
 fi
 
-if [[ "$BUILD_SCRIPT" == "" ]]; then
-	echo "must specify relative path to build script from the $REPO in $BUILD_SCRIPT"
-	exit 1
-fi
-
 if [[ "$INTEGRATION_TESTS_PATH" == "" ]]; then
 	echo "must specify full path to the integrations-test repo"
 	exit 1
 fi
 
 
+# if this is the integrations test, we have more tests to run
+BRANCH=`git rev-parse --abbrev-ref HEAD`
+
+# if its not integrations testing branch and we have no test_script, there's nothing to do!
+if [[ "$BRANCH" != "$INTEGRATION_TESTS_BRANCH" && "$TEST_SCRIPT" == "" ]]; then
+	echo "Not an integrations-test branch ($BRANCH) and no local TEST_SCRIPT. Nothing to do."
+	exit 0
+fi
+
 # ----------------------------------------------------------------------------
 # Set definitions and defaults
+
+# one for each integration test plus the native test for the repo
+n_TESTS=`expr ${#TESTS[@]} / $N_ATTRS`
+if [[ "$TEST_SCRIPT" != "" ]]; then
+	N_TESTS=$((n_TESTS + 1)) 
+else
+	N_TESTS=$n_TESTS
+fi
 
 if [ "$CIRCLE_BRANCH" ]
 then
@@ -234,7 +251,6 @@ then
 else
   IN_CIRCLE=false
 fi
-
 
 export TOOL=$(basename $REPO)
 export REPO_TO_TEST=$TOOL
@@ -274,9 +290,6 @@ mkdir -p $LOG_FOLDER
 docker run -d --name papertrail -v $LOG_FOLDER:/test_logs quay.io/eris/papertrail 
 echo ""
 
-# if this is the integrations test, we have more tests to run
-BRANCH=`git rev-parse --abbrev-ref HEAD`
-
 if [ "$BRANCH" == "$INTEGRATION_TESTS_BRANCH" ]; then
 	echo "We're on an integration test branch ($BRANCH)."
 
@@ -291,12 +304,20 @@ if [ "$BRANCH" == "$INTEGRATION_TESTS_BRANCH" ]; then
 	do
 		j=`expr $((i - 1)) \* $N_ATTRS` # index into quasi-multi-D-array
 		k=`expr $((i - 1)) \* $N_ATTRS + 2` # index into quasi-multi-D-array
+		l=`expr $((i - 1)) \* $N_ATTRS + 3` # index into quasi-multi-D-array
 		nextRepo=${TESTS[$j]}
 		if [ "$(basename $nextRepo)" != "$REPO_TO_TEST" ];  then
 			wd=${TESTS[$k]}
 			mkdir -p $wd
 			git clone https://$nextRepo $wd
-			cd $wd; git checkout $INTEGRATION_TEST_AGAINST_BRANCH
+			cd $wd
+			branch=$INTEGRATION_TEST_AGAINST_BRANCH
+			# if a more specific branch is given, use it
+			if [[ "${TESTS[$l]}" != "" ]]; then
+				branch=${TESTS[$l]}
+			fi
+			git checkout $branch
+
 		fi
 	done
 
@@ -326,7 +347,9 @@ if [ "$BRANCH" == "$INTEGRATION_TESTS_BRANCH" ]; then
 			echo "Launching one machine to run all $N_TESTS tests:"
 		fi
 		# print tests to run
-		echo " - $REPO_TO_TEST $BUILD_SCRIPT" # print repo and build script
+		if [[ "$TEST_SCRIPT" != "" ]]; then
+			echo " - $REPO_TO_TEST $TEST_SCRIPT" # print repo and build script
+		fi
 		for i in `seq 1 $n_TESTS`; do 
 			j=`expr $((i - 1)) \* $N_ATTRS` # index into quasi-multi-D-array
 			k=`expr $((i - 1)) \* $N_ATTRS + 1`  # index into quasi-multi-D-array
@@ -384,12 +407,12 @@ if [ "$BRANCH" == "$INTEGRATION_TESTS_BRANCH" ]; then
 			if [[ $i -ne 0 ]]; then
 				j=`expr $((i - 1)) \* $N_ATTRS + 1` # index into quasi-multi-D-array
 				k=`expr $((i - 1)) \* $N_ATTRS + 2` # index into quasi-multi-D-array
-				build_script="${TESTS[$j]}"
+				test_script="${TESTS[$j]}"
 				thisRepo="${TESTS[$k]}"
-				bash $INTEGRATION_TESTS_PATH/run_test.sh "integration" $mach $thisRepo $build_script $LOG_FOLDER &
+				bash $INTEGRATION_TESTS_PATH/run_test.sh "integration" $mach $thisRepo $test_script $LOG_FOLDER &
 				set_procs $i
 			else
-				bash $INTEGRATION_TESTS_PATH/run_test.sh "local" $mach $REPO $BUILD_SCRIPT $LOG_FOLDER &
+				bash $INTEGRATION_TESTS_PATH/run_test.sh "local" $mach $REPO $TEST_SCRIPT $LOG_FOLDER &
 				set_procs $i
 			fi
 			i=$((i+1))
@@ -408,26 +431,28 @@ if [ "$BRANCH" == "$INTEGRATION_TESTS_BRANCH" ]; then
 	    	connect_machine $mach
 
 		echo "* run pre events for $TOOL"
-		setupForTests > "$LOG_FOLDER/$TOOL-setup"
+		setupForTests &> "$LOG_FOLDER/$TOOL-setup"
 
-		# first run the local tests
-		echo "First, run the local tests"
-		bash $INTEGRATION_TESTS_PATH/run_test.sh "local" $mach $REPO $BUILD_SCRIPT $LOG_FOLDER
+		# first run the local tests if we have them
+		if [[ "$TEST_SCRIPT" != "" ]]; then
+			echo "First, run the local tests"
+			bash $INTEGRATION_TESTS_PATH/run_test.sh "local" $mach $REPO $TEST_SCRIPT $LOG_FOLDER
+		fi
 
 		# now the integration tests
-		echo "Now, run the integration tests"
+		echo "Run the integration tests"
 		for ii in `seq 1 $n_TESTS`; do
 			i=`expr $ii - 1`
 			j=`expr $((i - 1)) \* $N_ATTRS + 1` # index into quasi-multi-D-array
 			k=`expr $((i - 1)) \* $N_ATTRS + 2` # index into quasi-multi-D-array
-			build_script="${TESTS[$j]}"
+			test_script="${TESTS[$j]}"
 			thisRepo="${TESTS[$k]}"
-			bash $INTEGRATION_TESTS_PATH/run_test.sh "integration" $mach $thisRepo $build_script $LOG_FOLDER
+			bash $INTEGRATION_TESTS_PATH/run_test.sh "integration" $mach $thisRepo $test_script $LOG_FOLDER
 		done
 	fi
 else 
 	# no integration tests to run, just launch a machine and run the local test
-	echo "We are not an integration branch ($BRANCH). Just run the local tests ..."
+	echo "We are not an integration branch ($BRANCH). Just run the local tests"
 
 	if [[ $machine == "" ]]; then
 		NEW_MACHINE="true"
@@ -438,7 +463,6 @@ else
 		echo "Succesfully created and connected to new docker machine: $machine"
 	else
 		# we run the tests in sequence on our local docker or on some specified machine
-		# this is not meant to run on circle
 
 		if [[ $machine != "local" ]]; then
 			echo "Getting machine definition files sorted so we can connect to $machine"
@@ -456,15 +480,15 @@ else
 	fi
 
 	echo ""
-	echo "Building tests for $TOOL"
+	echo "Building and running tests for $TOOL"
 	strt=`pwd`
 	cd $REPO
 	# build and run the tests
-	$BUILD_SCRIPT
+	$TEST_SCRIPT
 
 	# logging the exit code
 	test_exit=$?
-	log_results "$TOOL ($BUILD_SCRIPT)" $test_exit
+	log_results "$TOOL ($TEST_SCRIPT)" $test_exit
 fi
 
 
@@ -491,7 +515,7 @@ if [[ "$NEW_MACHINE" == "true" ]];
 then
 	for mach in ${machines[@]}; do
 		echo "Removing $mach"
-		docker-machine rm -f $mach
+#		docker-machine rm -f $mach
 		ifExit "error removing machine $mach"
 	done
 	echo ""
