@@ -329,6 +329,16 @@ if [ "$BRANCH" == "$INTEGRATION_TESTS_BRANCH" ]; then
 
 		machines=(${machs[@]})
 		echo "Using given machines: ${machines[@]}"
+		echo "Grabbing machine definition files"
+		if [ "$IN_CIRCLE" = true ]; then
+		  docker pull quay.io/eris/test_machines &>/dev/null
+		  docker run --name $machine_definitions quay.io/eris/test_machines &>/dev/null
+		  rm -rf .docker &>/dev/null
+		  docker cp $machine_definitions:/home/eris/.docker $HOME &>/dev/null
+		else
+		  docker run --name $machine_definitions quay.io/eris/test_machines &>/dev/null
+		fi
+
 	else
 		NEW_MACHINE=true
 		
