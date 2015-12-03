@@ -278,9 +278,9 @@ if [[ "$CIRCLE_ARTIFACTS" != "" ]]; then
 	echo "Hello CIRCLE_ARTIFACTS!" > $CIRCLE_ARTIFACTS/hello
 fi
 
-echo "First thing first, create log folder ($LOG_FOLDER) and run a docker container to forward logs to papertrail:"
-mkdir -p $LOG_FOLDER
-docker run -d --name papertrail -v $LOG_FOLDER:/test_logs quay.io/eris/papertrail 
+#echo "First thing first, create log folder ($LOG_FOLDER) and run a docker container to forward logs to papertrail:"
+#mkdir -p $LOG_FOLDER
+#docker run -d --name papertrail -v $LOG_FOLDER:/test_logs quay.io/eris/papertrail 
 echo ""
 
 if [ "$BRANCH" == "$INTEGRATION_TESTS_BRANCH" ]; then
@@ -352,7 +352,7 @@ if [ "$BRANCH" == "$INTEGRATION_TESTS_BRANCH" ]; then
 	start_connect_machine $machine
 
 	echo "* run pre events for $TOOL"
-	setupForTests &> "$LOG_FOLDER/$TOOL-setup"
+	setupForTests #&> "$LOG_FOLDER/$TOOL-setup"
 
 	# first run the local tests if we have them
 	if [[ "$TEST_SCRIPT" != "" ]]; then

@@ -23,7 +23,7 @@ echo "... building/running tests for $base using $build_script"
 strt=`pwd`
 cd $thisRepo
 # build and run the tests
-$build_script &> $log_folder/$base
+$build_script #&> $log_folder/$base
 
 # logging the exit code
 test_exit=$?
