@@ -117,25 +117,25 @@ create_machine(){
 	ifExit "failed to create new machine $1"
 }
 
-connect() {
+start_connect_machine() {
   echo "Starting Machine."
-  docker-machine start $machine 1>/dev/null
-  until [[ $(docker-machine status $machine) == "Running" ]] || [ $ping_times -eq 10 ]
+  docker-machine start $1 1>/dev/null
+  until [[ $(docker-machine status $1) == "Running" ]] || [ $ping_times -eq 10 ]
   do
      ping_times=$[$ping_times +1]
      sleep 3
   done
-  if [[ $(docker-machine status $machine) != "Running" ]]
+  if [[ $(docker-machine status $1) != "Running" ]]
   then
     echo "Could not start the machine. Exiting this test."
     exit 1
   else
     echo "Machine Started."
-    docker-machine regenerate-certs -f $machine 2>/dev/null
+    # docker-machine regenerate-certs -f $1 2>/dev/null
   fi
   sleep 5
   echo "Connecting to Machine."
-  eval "$(docker-machine env $machine)" &>/dev/null
+  eval "$(docker-machine env $1)" &>/dev/null
   echo "Connected to Machine."
   echo ""
   clear_stuff
@@ -318,17 +318,8 @@ if [ "$BRANCH" == "$INTEGRATION_TESTS_BRANCH" ]; then
 	echo ""
 
 	# optionally specify machines to run the tests on
-	machs=(${@:1})
-	if [[ "$machs" != "" ]]; then
-		# if machs are given, there is either one for all tests, or enough to run all in parallel
-		n_machs="${#machs[@]}" 
-		if [[ "$nmachs" -gt 1 && "$nmachs" != $N_TESTS ]]; then
-			echo "if machines are specified, there must be just one or enough to run all the tests. got ${#machs[@]}, required $N_TESTS"
-			exit 1
-		fi
-
-		machines=(${machs[@]})
-		echo "Using given machines: ${machines[@]}"
+	if [[ "$machine" != "" ]]; then
+		echo "Using given machine: $machine"
 		echo "Grabbing machine definition files"
 		if [ "$IN_CIRCLE" = true ]; then
 		  docker pull quay.io/eris/test_machines &>/dev/null
@@ -355,14 +346,10 @@ if [ "$BRANCH" == "$INTEGRATION_TESTS_BRANCH" ]; then
 
 		machine="eris-test-$SWARM-it-$TOOL-$MACHINE_INDEX"
 		create_machine $machine
-		machines=($machine)
 		echo "Done launching machine"
 	fi
 
-	echo "Run tests in serial on machine ${machines[@]}"
-
-	mach=$machines # the first element		
-	connect_machine $mach
+	start_connect_machine $machine
 
 	echo "* run pre events for $TOOL"
 	setupForTests &> "$LOG_FOLDER/$TOOL-setup"
@@ -370,7 +357,7 @@ if [ "$BRANCH" == "$INTEGRATION_TESTS_BRANCH" ]; then
 	# first run the local tests if we have them
 	if [[ "$TEST_SCRIPT" != "" ]]; then
 		echo "First, run the local tests"
-		bash $INTEGRATION_TESTS_PATH/run_test.sh "local" $mach $REPO $TEST_SCRIPT $LOG_FOLDER
+		bash $INTEGRATION_TESTS_PATH/run_test.sh "local" $machine $REPO $TEST_SCRIPT $LOG_FOLDER
 	fi
 
 	# now the integration tests
@@ -381,7 +368,7 @@ if [ "$BRANCH" == "$INTEGRATION_TESTS_BRANCH" ]; then
 		k=`expr $((i - 1)) \* $N_ATTRS + 2` # index into quasi-multi-D-array
 		test_script="${TESTS[$j]}"
 		thisRepo="${TESTS[$k]}"
-		bash $INTEGRATION_TESTS_PATH/run_test.sh "integration" $mach $thisRepo $test_script $LOG_FOLDER
+		bash $INTEGRATION_TESTS_PATH/run_test.sh "integration" $machine $thisRepo $test_script $LOG_FOLDER
 	done
 else 
 	# no integration tests to run, just launch a machine and run the local test
