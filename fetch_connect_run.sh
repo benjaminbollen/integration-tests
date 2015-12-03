@@ -37,7 +37,7 @@ source $INTEGRATION_TESTS_PATH/util.sh
 # NOTE: these need to run on each machine
 # NOTE: this is a place for custom options for each repo. Don't forget to pull a repo that's not present
 # TODO: move this to each repo?
-setupForTests(){
+netupForTests(){
 	case $TOOL in
 	"eris-cli" )  
 			# build the docker image, set the eris version
@@ -58,6 +58,9 @@ setupForTests(){
 	*) 	echo "must specify a valid TOOL. Got: $TOOL."
 		;;
 	esac
+
+	echo ""
+	echo ""
 }
 
 
@@ -114,11 +117,10 @@ fi
 
 # now the integration tests
 echo "Run the integration tests"
-for ii in `seq 1 $n_TESTS`; do
-	i=`expr $ii - 1`
-	j=`expr $((i - 1)) \* $N_ATTRS + 1` # index into quasi-multi-D-array
-	k=`expr $((i - 1)) \* $N_ATTRS + 2` # index into quasi-multi-D-array
-	test_script="${TESTS[$j]}"
-	thisRepo="${TESTS[$k]}"
+for i in `seq 1 $n_TESTS`; do
+	j=`expr $((i - 1)) \* $N_ATTRS` # index into quasi-multi-D-array
+	k=`expr $((i - 1)) \* $N_ATTRS + 1` # index into quasi-multi-D-array
+	thisRepo="${TESTS[$j]}"
+	test_script="${TESTS[$k]}"
 	bash $INTEGRATION_TESTS_PATH/run_test.sh "integration" $MACHINE $thisRepo $test_script $LOG_FOLDER
 done

@@ -2,13 +2,6 @@
 
 export SWARM="dca1"
 
-machine_definitions=matDef
-entrypoint="/home/eris/integration-tests/fetch_connect_run.sh"
-testimage=eris/itests
-testuser=eris
-remotesocket=2376
-localsocket=/var/run/docker.sock
-
 # Read args and check required vars
 
 export MACHINE=$1 # either "local", a machine in the matdef, or empty to create a new one

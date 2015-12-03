@@ -18,6 +18,17 @@ ifExit(){
 
 export -f ifExit
 
+clear_stuff() {
+  echo "Clearing images and containers."
+  set +e
+  docker rm $(docker ps -a -q) &>/dev/null
+  docker rmi $(docker images -q) &>/dev/null
+  set -e
+  echo ""
+}
+
+export -f clear_stuff
+
 # create_connect_machine(machine_name)
 create_connect_machine(){
 	create_machine $1
@@ -64,6 +75,8 @@ start_connect_machine() {
   echo ""
   clear_stuff
 }
+
+
 
 export -f start_connect_machine
 
