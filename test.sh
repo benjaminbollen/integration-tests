@@ -52,8 +52,6 @@ setupForTests(){
 	esac
 }
 
-export -f setupForTests
-
 # ----------------------------------------------------------------------------
 # Functions we'll need for checking machines/swarms and running the tests
 
@@ -102,9 +100,6 @@ ifExit(){
 	fi
 }
 
-export -f ifExit
-
-
 # create_connect_machine(machine_name)
 create_connect_machine(){
 	create_machine $1
@@ -116,8 +111,6 @@ connect_machine(){
 	eval $(docker-machine env $1)
 	ifExit "failed to connect to $1"
 }
-
-export -f connect_machine
 
 create_machine(){
 	docker-machine create --driver amazonec2 $1
@@ -339,13 +332,7 @@ if [ "$BRANCH" == "$INTEGRATION_TESTS_BRANCH" ]; then
 	else
 		NEW_MACHINE=true
 		
-		# either we launch one machine per test, or we launch em in parallel
-
-		if [[ "$INTEGRATION_TESTS_CONCURRENT" == "true" ]]; then
-			echo "Launching one machine for each of the $N_TESTS tests:"
-		else
-			echo "Launching one machine to run all $N_TESTS tests:"
-		fi
+		echo "Launching one machine to run all $N_TESTS tests:"
 		# print tests to run
 		if [[ "$TEST_SCRIPT" != "" ]]; then
 			echo " - $REPO_TO_TEST $TEST_SCRIPT" # print repo and build script
@@ -356,100 +343,36 @@ if [ "$BRANCH" == "$INTEGRATION_TESTS_BRANCH" ]; then
 			echo " - ${TESTS[$j]}: ${TESTS[$k]}" # print repo and build script
 		done
 
-		if [[ "$INTEGRATION_TESTS_CONCURRENT" == "true" ]]; then
-			# launch one machine for each test
-			for i in `seq 1 $N_TESTS`;
-			do
-				if [[ "$i" -ne 1 ]]; then
-					j=`expr $((i - 2)) \* $N_ATTRS` # index into quasi-multi-D-array
-					thisRepo="${TESTS[$j]}"
-					base=$(basename $thisRepo)
-				else
-					base="$TOOL-local" # for the repos own tests
-				fi
-				MACHINE_INDEX=$(rand8)
-				machine="eris-test-$SWARM-$base-$MACHINE_INDEX"
-				create_machine $machine &
-				set_procs $machine
-				echo "... initialized machine creation for $machine"
-			done 
-			echo "Waiting for machines to start ..."
-			wait_procs
-			check_procs
-			if [[ $? -ne 0 ]]; then
-				echo "Error starting a machine. Removing machines ..."
-				for mach in "${launch_procs[@]}"; do
-					docker-machine rm -f $mach
-				done
-				exit 1
-			fi
-			echo "All machines started!"
-			machines=(${!launch_procs[@]})
-			clear_procs
-		else
-			# launch one machine to run all tests
-			machine="eris-test-$SWARM-it-$TOOL-$MACHINE_INDEX"
-			create_machine $machine
-			machines=($machine)
-		fi 
-		echo "Done launching machines"
+		machine="eris-test-$SWARM-it-$TOOL-$MACHINE_INDEX"
+		create_machine $machine
+		machines=($machine)
+		echo "Done launching machine"
 	fi
 
-	if [[ "$INTEGRATION_TESTS_CONCURRENT" == "true" ]]; then
-		echo "Run a test with each machine (${machines[@]})"
-		# now loop over all the machines and run a test on each one
-		# the first machine gets the local test, all others get an integrations test from $TESTS
-		i=0
-		for mach in "${machines[@]}"
-		do
-			echo "Running test $i with machine $mach"
-			# everything gets logged into files watched by papertrail
-			if [[ $i -ne 0 ]]; then
-				j=`expr $((i - 1)) \* $N_ATTRS + 1` # index into quasi-multi-D-array
-				k=`expr $((i - 1)) \* $N_ATTRS + 2` # index into quasi-multi-D-array
-				test_script="${TESTS[$j]}"
-				thisRepo="${TESTS[$k]}"
-				bash $INTEGRATION_TESTS_PATH/run_test.sh "integration" $mach $thisRepo $test_script $LOG_FOLDER &
-				set_procs $i
-			else
-				bash $INTEGRATION_TESTS_PATH/run_test.sh "local" $mach $REPO $TEST_SCRIPT $LOG_FOLDER &
-				set_procs $i
-			fi
-			i=$((i+1))
-		done
-		echo "Waiting for all tests to finish ..."
-		wait_procs # this will wait for all to finish, but we should really die as soon as something fails
-		echo "All tests finished"
-		check_procs
-		#if [[ $? -ne 0 ]]; then
-		#	a test failed. it's caught at the end
-		#fi
-	else
-		echo "Run tests in serial on machine ${machines[@]}"
+	echo "Run tests in serial on machine ${machines[@]}"
 
-		mach=$machines # the first element		
-	    	connect_machine $mach
+	mach=$machines # the first element		
+	connect_machine $mach
 
-		echo "* run pre events for $TOOL"
-		setupForTests &> "$LOG_FOLDER/$TOOL-setup"
+	echo "* run pre events for $TOOL"
+	setupForTests &> "$LOG_FOLDER/$TOOL-setup"
 
-		# first run the local tests if we have them
-		if [[ "$TEST_SCRIPT" != "" ]]; then
-			echo "First, run the local tests"
-			bash $INTEGRATION_TESTS_PATH/run_test.sh "local" $mach $REPO $TEST_SCRIPT $LOG_FOLDER
-		fi
-
-		# now the integration tests
-		echo "Run the integration tests"
-		for ii in `seq 1 $n_TESTS`; do
-			i=`expr $ii - 1`
-			j=`expr $((i - 1)) \* $N_ATTRS + 1` # index into quasi-multi-D-array
-			k=`expr $((i - 1)) \* $N_ATTRS + 2` # index into quasi-multi-D-array
-			test_script="${TESTS[$j]}"
-			thisRepo="${TESTS[$k]}"
-			bash $INTEGRATION_TESTS_PATH/run_test.sh "integration" $mach $thisRepo $test_script $LOG_FOLDER
-		done
+	# first run the local tests if we have them
+	if [[ "$TEST_SCRIPT" != "" ]]; then
+		echo "First, run the local tests"
+		bash $INTEGRATION_TESTS_PATH/run_test.sh "local" $mach $REPO $TEST_SCRIPT $LOG_FOLDER
 	fi
+
+	# now the integration tests
+	echo "Run the integration tests"
+	for ii in `seq 1 $n_TESTS`; do
+		i=`expr $ii - 1`
+		j=`expr $((i - 1)) \* $N_ATTRS + 1` # index into quasi-multi-D-array
+		k=`expr $((i - 1)) \* $N_ATTRS + 2` # index into quasi-multi-D-array
+		test_script="${TESTS[$j]}"
+		thisRepo="${TESTS[$k]}"
+		bash $INTEGRATION_TESTS_PATH/run_test.sh "integration" $mach $thisRepo $test_script $LOG_FOLDER
+	done
 else 
 	# no integration tests to run, just launch a machine and run the local test
 	echo "We are not an integration branch ($BRANCH). Just run the local tests"

@@ -19,16 +19,6 @@ else
     exit 1
 fi
 
-if [[ "$INTEGRATION_TESTS_CONCURRENT" == "true" ]]; then
-        connect_machine $machine
-        if [[ "$INTEGRATION_TESTS_REGENERATE_CERTS" == "true" ]]; then
-    	yes | docker-machine regenerate-certs $1
-        fi
-
-        echo "... run pre events for $base"
-        setupForTests &> "$log_folder/$base-setup"
-fi
-
 echo "... building/running tests for $base using $build_script"
 strt=`pwd`
 cd $thisRepo
