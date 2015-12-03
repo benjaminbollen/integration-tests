@@ -118,9 +118,9 @@ fi
 # now the integration tests
 echo "Run the integration tests"
 for i in `seq 1 $n_TESTS`; do
-	j=`expr $((i - 1)) \* $N_ATTRS` # index into quasi-multi-D-array
-	k=`expr $((i - 1)) \* $N_ATTRS + 1` # index into quasi-multi-D-array
-	thisRepo="${TESTS[$j]}"
-	test_script="${TESTS[$k]}"
+	j=`expr $((i - 1)) \* $N_ATTRS + 1` # index into quasi-multi-D-array
+	k=`expr $((i - 1)) \* $N_ATTRS + 2` # index into quasi-multi-D-array
+	test_script="${TESTS[$j]}"
+	thisRepo="${TESTS[$k]}"
 	bash $INTEGRATION_TESTS_PATH/run_test.sh "integration" $MACHINE $thisRepo $test_script $LOG_FOLDER
 done
