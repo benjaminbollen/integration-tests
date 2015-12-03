@@ -39,9 +39,12 @@ source $INTEGRATION_TESTS_PATH/util.sh
 if [ "$CIRCLE_BRANCH" ]
 then
   IN_CIRCLE=true
+  echo "Tests are running from CircleCI"
 else
   IN_CIRCLE=false
 fi
+
+
 
 export TOOL=$(basename $REPO)
 export REPO_TO_TEST=$TOOL
@@ -86,12 +89,12 @@ if [ "$BRANCH" == "$INTEGRATION_TESTS_BRANCH" ]; then
 	# optionally specify machine to run the tests on
 	if [[ "$MACHINE" != "" ]]; then
 		echo "Using given machine: $MACHINE"
-		echo "Grabbing machine definition files"
 		if [ "$IN_CIRCLE" = true ]; then
+		  echo "Grabbing machine definition files"
 		  docker pull quay.io/eris/test_machines &>/dev/null
 		  docker run --name $machine_definitions quay.io/eris/test_machines &>/dev/null
 		  rm -rf .docker &>/dev/null
-		  docker cp $machine_definitions:/home/eris/.docker $HOME &>/dev/null
+		  docker cp $machine_definitions:/home/eris/.docker $HOME 
 		else
 		  docker run --name $machine_definitions quay.io/eris/test_machines &>/dev/null
 		fi
