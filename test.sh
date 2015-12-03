@@ -131,11 +131,11 @@ start_connect_machine() {
     exit 1
   else
     echo "Machine Started."
-    # docker-machine regenerate-certs -f $1 2>/dev/null
+    docker-machine regenerate-certs -f $1 
   fi
   sleep 5
   echo "Connecting to Machine."
-  eval "$(docker-machine env $1)" &>/dev/null
+  eval $(docker-machine env $1)
   echo "Connected to Machine."
   echo ""
   clear_stuff
