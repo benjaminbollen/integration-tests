@@ -2,6 +2,8 @@
 
 # this exists as its own script because it needs isolated environment variables for connecting to docker
 
+source $INTEGRATION_TESTS_PATH/util.sh
+
 test_type=$1
 machine=$2
 thisRepo=$3
