@@ -6,6 +6,8 @@ export SWARM="dca1"
 
 export MACHINE=$1 # either "local", a machine in the matdef, or empty to create a new one
 
+export MACHINE_DEFINITIONS=matdef
+
 
 if [[ "$REPO" == "" ]]; then
 	echo "must specify full path to the repo in $REPO"
@@ -92,11 +94,11 @@ if [ "$BRANCH" == "$INTEGRATION_TESTS_BRANCH" ]; then
 		if [ "$IN_CIRCLE" = true ]; then
 		  echo "Grabbing machine definition files"
 		  docker pull quay.io/eris/test_machines &>/dev/null
-		  docker run --name $machine_definitions quay.io/eris/test_machines &>/dev/null
+		  docker run --name $MACHINE_DEFINITIONS quay.io/eris/test_machines &>/dev/null
 		  rm -rf .docker &>/dev/null
-		  docker cp $machine_definitions:/home/eris/.docker $HOME 
+		  docker cp $MACHINE_DEFINITIONS:/home/eris/.docker $HOME 
 		else
-		  docker run --name $machine_definitions quay.io/eris/test_machines &>/dev/null
+		  docker run --name $MACHINE_DEFINITIONS quay.io/eris/test_machines &>/dev/null
 		fi
 
 		# XXX: test_machines expect /home/eris, so we overwrite the config
@@ -132,11 +134,11 @@ else
 			echo "Getting machine definition files sorted so we can connect to $MACHINE"
 			if [ "$IN_CIRCLE" = true ]; then
 			  docker pull quay.io/eris/test_machines &>/dev/null
-			  docker run --name $machine_definitions quay.io/eris/test_machines &>/dev/null
+			  docker run --name $MACHINE_DEFINITIONS quay.io/eris/test_machines &>/dev/null
 			  rm -rf .docker &>/dev/null
-			  docker cp $machine_definitions:/home/eris/.docker $HOME &>/dev/null
+			  docker cp $MACHINE_DEFINITIONS:/home/eris/.docker $HOME &>/dev/null
 			else
-			  docker run --name $machine_definitions quay.io/eris/test_machines &>/dev/null
+			  docker run --name $MACHINE_DEFINITIONS quay.io/eris/test_machines &>/dev/null
 			fi
 
 			eval $(docker-machine env $MACHINE)

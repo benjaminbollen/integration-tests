@@ -37,7 +37,7 @@ source $INTEGRATION_TESTS_PATH/util.sh
 # NOTE: these need to run on each machine
 # NOTE: this is a place for custom options for each repo. Don't forget to pull a repo that's not present
 # TODO: move this to each repo?
-netupForTests(){
+setupForTests(){
 	case $TOOL in
 	"eris-cli" )  
 			# build the docker image, set the eris version
