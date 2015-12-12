@@ -17,13 +17,13 @@ TEST_MINDY=("github.com/eris-ltd/mindy" "test/porcelain/build.sh" "$GOPATH/src/g
 # each pair is serialized into a string
 TESTS=(
 	"${TEST_MINT_CLIENT[@]}"
-	"${TEST_MINDY[@]}" 
+	"${TEST_MINDY[@]}"
 )
 
 # one for each integration test plus the native test for the repo
 n_TESTS=`expr ${#TESTS[@]} / $N_ATTRS`
 if [[ "$TEST_SCRIPT" != "" ]]; then
-	N_TESTS=$((n_TESTS + 1)) 
+	N_TESTS=$((n_TESTS + 1))
 else
 	N_TESTS=$n_TESTS
 fi
@@ -39,23 +39,27 @@ source $INTEGRATION_TESTS_PATH/util.sh
 # TODO: move this to each repo?
 setupForTests(){
 	case $TOOL in
-	"eris-cli" )  
+	"eris-cli" )
 			# build the docker image, set the eris version
 			cd $GOPATH/src/github.com/eris-ltd/eris-cli
-			ERIS_VERSION=`git rev-parse --abbrev-ref HEAD`
+			ERIS_VERSION=$(cat version/version.go | tail -n 2 | head -n 1 | cut -d \  -f 4 | tr -d '"')
 			export ERIS_VERSION
-			docker build -t quay.io/eris/eris:$ERIS_VERSION .
+			docker build -t quay.io/eris/eris:$ERIS_VERSION . 1>/dev/null
 		;;
-	"mint-client" )  
-		docker pull quay.io/eris/erisdb:$ERIS_VERSION
-		;; 
-	"eris-db" )  cd $GOPATH/src/github.com/eris-ltd/eris-db; docker build -t eris/erisdb:$ERIS_VERISON -f ./DOCKER/Dockerfile .
+	"mint-client" )
+			docker pull quay.io/eris/erisdb:$ERIS_VERSION
 		;;
-	"eris-db.js" )  # ?
-		;;  
-	"eris-contracts.js" )  # ?
+	"eris-db" )
+			cd $GOPATH/src/github.com/eris-ltd/eris-db; docker build -t eris/erisdb:$ERIS_VERISON -f ./DOCKER/Dockerfile .
 		;;
-	*) 	echo "must specify a valid TOOL. Got: $TOOL."
+	"eris-db.js" )
+			# ?
+		;;
+	"eris-contracts.js" )
+			# ?
+		;;
+	* )
+			echo "must specify a valid TOOL. Got: $TOOL."
 		;;
 	esac
 
@@ -68,7 +72,7 @@ echo "The following integration tests will run"
 if [[ "$TEST_SCRIPT" != "" ]]; then
 	echo " - $REPO_TO_TEST $TEST_SCRIPT" # print repo and build script
 fi
-for i in `seq 1 $n_TESTS`; do 
+for i in `seq 1 $n_TESTS`; do
 	j=`expr $((i - 1)) \* $N_ATTRS` # index into quasi-multi-D-array
 	k=`expr $((i - 1)) \* $N_ATTRS + 1`  # index into quasi-multi-D-array
 	echo " - ${TESTS[$j]}: ${TESTS[$k]}" # print repo and build script
@@ -79,7 +83,7 @@ echo "Integration tests will run against $INTEGRATION_TEST_AGAINST_BRANCH. Fetch
 
 
 # grab all the repos except the one we're testing (use n_TESTS)
-for i in `seq 1 $n_TESTS` 
+for i in `seq 1 $n_TESTS`
 do
 	j=`expr $((i - 1)) \* $N_ATTRS` # index into quasi-multi-D-array
 	k=`expr $((i - 1)) \* $N_ATTRS + 2` # index into quasi-multi-D-array
